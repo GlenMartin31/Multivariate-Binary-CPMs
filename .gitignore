@@ -1,0 +1,11 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+#Ignore testing R code
+Joint\ Logistic\ CPMs.R
+Simple\ Linear\ Example.R
+
+#Ignore the Outputs folder, which contains draft manuscripts
+Outputs/

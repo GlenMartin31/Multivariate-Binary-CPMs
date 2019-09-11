@@ -1,0 +1,27 @@
+model  {
+  #Declare likelihood for Y, relationship between Y and Y_s
+  for (i in 1:n)  {
+    for (q in 1:2) {
+      Y[i,q] ~ dinterval(Z[i,q],0)
+      mu[i,q] <- X[i,] %*% Beta[,q]
+    }
+    Z[i,1:2] ~ dmnorm(mu[i,],prec[1:2,1:2])
+  }
+
+  #Prior on Betas
+  for (q in 1:2) {
+    Beta[1:P,q] ~ dmnorm(b_0,B_0)
+  }
+
+  #Prior on covariance matrix
+  prec[1:2,1:2] <- inverse(cov[,])
+  cov[1,1] <- sigma[1] * sigma[1]
+  cov[1,2] <- sigma[1] * sigma[2] * rho
+  cov[2,1] <- sigma[1] * sigma[2] * rho
+  cov[2,2] <- sigma[2] * sigma[2]
+  
+  # Flat priors on all parameters which could, of course, be made more informative.
+  sigma[1] = 1
+  sigma[2] = 1
+  rho ~ dunif(-1, 1)
+}
