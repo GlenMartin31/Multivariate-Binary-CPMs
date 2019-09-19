@@ -9,7 +9,8 @@ simulationcall.fnc <- function(iter = 100,
                                startingseed) {
   #Input: iter = number of iterations to repeat the simulation over,
   #       N = the number of observations to generate
-  #       rho.vals = strength of the association between the latent variables used to derive Y1 and Y2. When rho=0, Y1 and Y2 are independent
+  #       rho.vals = strength of the association between the latent variables used to derive Y1 and Y2. When 
+  #                   rho=0, Y1 and Y2 are independent
   #       K = the number of folds for k-fold cross validation for Hierarchical Related CPM. K = N gives leave-one-out CV
   #       filename = character variable giving the name of the text file to store the results
   #       startingseed = starting seed for the random number generator
@@ -19,6 +20,7 @@ simulationcall.fnc <- function(iter = 100,
   library(rjags)
   library(coda)
   library(pbivnorm)
+  library(nnet)
   
   set.seed(startingseed)
   
@@ -98,6 +100,23 @@ simulationcall.fnc <- function(iter = 100,
       Validation.Population$PCC_P11 <- PCC$P11
       Validation.Population$PCC_P10 <- PCC$P10
       Validation.Population$PCC_P01 <- PCC$P01
+      
+      
+      #Multinomial Logistic Regression (MLR)
+      MLR <- multinom(Y_Categories ~ X1 + X2, 
+                      data = IPD %>%
+                        mutate(Y_Categories = fct_relevel(factor(ifelse(Y1 == 0 & Y2 == 0, 
+                                                                        "(0,0)",
+                                                                        ifelse(Y1 == 1 & Y2 == 0,
+                                                                               "(1,0)",
+                                                                               ifelse(Y1 == 0 & Y2 == 1,
+                                                                                      "(0,1)",
+                                                                                      "(1,1)")))),
+                                                          c("(0,0)", "(1,0)", "(0,1)", "(1,1)"))))
+      MLR.predictions <- predict(MLR, newdata = Validation.Population, "probs")
+      Validation.Population$MLR_P11 <- MLR.predictions[,"(1,1)"]
+      Validation.Population$MLR_P10 <- MLR.predictions[,"(1,0)"]
+      Validation.Population$MLR_P01 <- MLR.predictions[,"(0,1)"]
       
       
       #Multivariate Logistic Model (MLM)
@@ -185,6 +204,7 @@ simulationcall.fnc <- function(iter = 100,
                Univariate_P11, Univariate_P10, Univariate_P01,
                HRR_P11, HRR_P10, HRR_P01,
                PCC_P11, PCC_P10, PCC_P01,
+               MLR_P11, MLR_P10, MLR_P01,
                MLM_P11, MLM_P10, MLM_P01,
                MPM_P11, MPM_P10, MPM_P01,
                SR_P11, SR_P10, SR_P01) %>%
@@ -200,6 +220,9 @@ simulationcall.fnc <- function(iter = 100,
                
                PCC_Py1 = PCC_P10 + PCC_P11,
                PCC_Py2 = PCC_P01 + PCC_P11,
+               
+               MLR_Py1 = MLR_P10 + MLR_P11,
+               MLR_Py2 = MLR_P01 + MLR_P11,
                
                MLM_Py1 = MLM_P10 + MLM_P11,
                MLM_Py2 = MLM_P01 + MLM_P11,
@@ -218,7 +241,7 @@ simulationcall.fnc <- function(iter = 100,
       
       
       Results <- NULL
-      for (ModelName in c("Univariate", "HRR", "PCC", "MLM", "MPM", "SR")) {
+      for (ModelName in c("Univariate", "HRR", "PCC", "MLR", "MLM", "MPM", "SR")) {
         Results <- Results %>%
           bind_rows(Performance.fnc(ObservedOutcome = Predictions$Y1, 
                                     PredictedRisk = eval(parse(text = paste("Predictions$",
@@ -325,7 +348,7 @@ DataGenerating.fnc <- function(N, beta_1_true, beta_2_true, rho) {
   #Generate random vectors from standard multivariate normal distribution with inputted correlation, rho
   Z <- MASS::mvrnorm(n = N, mu = c(0,0), 
                      Sigma = toeplitz(c(1, rho)))
-  Epsilon <- apply(pnorm(Z), 2, Inverse.Logistic.CDF) #aaply the inverse probability transform
+  Epsilon <- apply(pnorm(Z), 2, Inverse.Logistic.CDF) #apply the inverse probability transform
   
   IPD <- data.frame("ID" = seq(from = 1, to = N, by = 1),
                     X) %>%
