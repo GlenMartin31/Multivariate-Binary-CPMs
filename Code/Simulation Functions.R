@@ -4,14 +4,12 @@
 simulationcall.fnc <- function(iter = 100,
                                N, 
                                rho.vals = 0,
-                               K = N,
                                filename,
                                startingseed) {
   #Input: iter = number of iterations to repeat the simulation over,
   #       N = the number of observations to generate
   #       rho.vals = strength of the association between the latent variables used to derive Y1 and Y2. When 
   #                   rho=0, Y1 and Y2 are independent
-  #       K = the number of folds for k-fold cross validation for Hierarchical Related CPM. K = N gives leave-one-out CV
   #       filename = character variable giving the name of the text file to store the results
   #       startingseed = starting seed for the random number generator
   
@@ -87,8 +85,7 @@ simulationcall.fnc <- function(iter = 100,
       
       #Hierarchical Related Regression
       HRR <- Hierarchical.Related.CPM.fnc(DevelopmentData = IPD, 
-                                          TestData = Validation.Population,
-                                          K = K)
+                                          TestData = Validation.Population)
       Validation.Population$HRR_P11 <- HRR$Pi_Y1 * HRR$Pi_Y2
       Validation.Population$HRR_P10 <- HRR$Pi_Y1 * (1 - HRR$Pi_Y2)
       Validation.Population$HRR_P01 <- (1 - HRR$Pi_Y1) * HRR$Pi_Y2
@@ -366,57 +363,40 @@ DataGenerating.fnc <- function(N, beta_1_true, beta_2_true, rho) {
 ## Function to fit the Hierarchical Related CPM
 ####-----------------------------------------------------------------------------------------
 
-Hierarchical.Related.CPM.fnc <- function(DevelopmentData, TestData, K) {
+Hierarchical.Related.CPM.fnc <- function(DevelopmentData, TestData) {
   #Inputs: DevelopmentData = data on which to derive the Hierarchical Related CPM
   #        TestData = data on which to predict risk for each outcome (marginal), 
-  #        K = the number of k-fold cross validation: K = nrow(DevelopmentData) is leave-one-out CV
   
-  #Perform leave-one-out cross validation to obtain estimates of pi1 and pi2 from each 
-  # 'initial' model in each 'permutation' stage
-  DevelopmentData$Pi1_m1 <- NA
-  DevelopmentData$Pi2_m2 <- NA
-  
-  folds <- cut(seq(1,nrow(DevelopmentData)), breaks = K, labels = FALSE)
-  cv.pb <- txtProgressBar()
-  print("Cross Validation Progress for Hierarchical Related CPM")
-  for (i in 1:K) {
-    testIndexes <- which(folds == i, arr.ind = TRUE)
-    
-    CV.Data <- DevelopmentData %>% slice(-testIndexes)
-    
-    m1_Pi1 <- glm(Y1 ~ X1 + X2, data = CV.Data, family = binomial(link = "logit"))
-    DevelopmentData$Pi1_m1[testIndexes] <- predict(m1_Pi1, 
-                                                   newdata = DevelopmentData %>% 
-                                                     slice(testIndexes), 
-                                                   type = "response")
-    
-    
-    m2_Pi2 <- glm(Y2 ~ X1 + X2, data = CV.Data, family = binomial(link = "logit"))
-    DevelopmentData$Pi2_m2[testIndexes] <- predict(m2_Pi2, 
-                                                   newdata = DevelopmentData %>%
-                                                     slice(testIndexes), 
-                                                   type = "response")
-    
-    setTxtProgressBar(cv.pb, i/K)
-  }; close(cv.pb)
-  ##Now fit the models to the full development data to arrive at parameter estimates for future prediction
-  #In the first 'permutation' we start with estimating Y1
+  ## In the first 'permutation' we start with estimating Y1
   m1_Pi1 <- glm(Y1 ~ X1 + X2, data = DevelopmentData, family = binomial(link = "logit"))
+  DevelopmentData$Pi1_m1 <- predict(m1_Pi1, 
+                                    newdata = DevelopmentData, 
+                                    type = "response")
+  #...then use the predicted risk for Y1 to estimate Y2
   m1_Pi2 <- glm(Y2 ~ X1 + X2 + Pi1_m1, data = DevelopmentData, family = binomial(link = "logit"))
-  #In the second 'permutation' we start with estimating Y2
+  
+  
+  ## In the second 'permutation' we start with estimating Y2
   m2_Pi2 <- glm(Y2 ~ X1 + X2, data = DevelopmentData, family = binomial(link = "logit"))
+  DevelopmentData$Pi2_m2 <- predict(m2_Pi2, 
+                                    newdata = DevelopmentData, 
+                                    type = "response")
+  #...then use the predicted risk for Y2 to estimate Y1
   m2_Pi1 <- glm(Y1 ~ X1 + X2 + Pi2_m2, data = DevelopmentData, family = binomial(link = "logit"))
   
   
-  #Now predict for each observation in the TestData
+  ## Now use each permutation model to predict risk of Y1 or Y2 for each observation in the TestData
   TestData$Pi1_m1 <- predict(m1_Pi1, newdata = TestData, type = "response")
   TestData$Pi2_m1 <- predict(m1_Pi2, newdata = TestData, type = "response")
   TestData$Pi2_m2 <- predict(m2_Pi2, newdata = TestData, type = "response")
   TestData$Pi1_m2 <- predict(m2_Pi1, newdata = TestData, type = "response")
   
+  ## Take an ensemble of the predicted risks from each permutation model to obtaine the
+  # overall (marginal) predicted risk 
   Pi_Y1 <- apply(cbind(TestData$Pi1_m1, TestData$Pi1_m2), 1, mean)
   Pi_Y2 <- apply(cbind(TestData$Pi2_m1, TestData$Pi2_m2), 1, mean)
   
+  ## Return the results
   return(list("m1_Pi1" = m1_Pi1,
               "m1_Pi2" = m1_Pi2,
               "m2_Pi1" = m2_Pi1,
