@@ -4,13 +4,12 @@
 simulationcall.fnc <- function(iter = 100,
                                N, 
                                rho.vals = 0,
-                               K = N,
                                filename,
                                startingseed) {
   #Input: iter = number of iterations to repeat the simulation over,
   #       N = the number of observations to generate
-  #       rho.vals = strength of the association between the latent variables used to derive Y1 and Y2. When rho=0, Y1 and Y2 are independent
-  #       K = the number of folds for k-fold cross validation for Hierarchical Related CPM. K = N gives leave-one-out CV
+  #       rho.vals = strength of the association between the latent variables used to derive Y1 and Y2. When 
+  #                   rho=0, Y1 and Y2 are independent
   #       filename = character variable giving the name of the text file to store the results
   #       startingseed = starting seed for the random number generator
   
@@ -19,6 +18,7 @@ simulationcall.fnc <- function(iter = 100,
   library(rjags)
   library(coda)
   library(pbivnorm)
+  library(nnet)
   
   set.seed(startingseed)
   
@@ -52,20 +52,24 @@ simulationcall.fnc <- function(iter = 100,
   beta_1_true <- c(-1.0, log(2), log(1.00))
   beta_2_true <- c(-1.5, log(1.00), log(3))
   
+  #Repeat the simulation over all values of rho
   for (rho in rho.vals) {
     
+    #define a progress bar to monitor progress across iterations of the simulation
     pb <- winProgressBar(title = "Iteration Progress bar",
                          label = paste("Iterations 0% Completed"),
                          min = 0, max = 100, initial = 0)
     for (iteration in 1:iter) {
       
-      CombinedData <- DataGenerating.fnc(N = sum(N, 10000), #add on 10000 additional observations to serve as a validation set 
+      CombinedData <- DataGenerating.fnc(N = sum(N, 10000), #add 10000 additional observations for a validation set 
                                          beta_1_true = beta_1_true, 
                                          beta_2_true = beta_2_true, 
                                          rho = rho)
       
+      #Randomly split into an IPD and validation cohort, since both are a random sample of the same underlying 
+      #data generating process
       IPD <- CombinedData %>%
-        sample_n(N, replace = FALSE) #IPD and validation cohorts are a random sample of the same underlying data generating mechasm.
+        sample_n(N, replace = FALSE) 
       Validation.Population <- CombinedData %>%
         filter(ID %in% IPD$ID == FALSE)
       
@@ -73,49 +77,77 @@ simulationcall.fnc <- function(iter = 100,
       ####-----------------
       ## Model Development
       ####-----------------
-      #Start by fitting each model independently
+      
+      ## Univariate Models: fit a model to each outcome independently
       Uni.m1 <- glm(Y1 ~ X1 + X2, data = IPD, family = binomial(link = "logit"))
       Uni.m2 <- glm(Y2 ~ X1 + X2, data = IPD, family = binomial(link = "logit"))
+      #Predict the risk of each outcome in the validation cohort, based on the univariate models
       Univariate_PY1 <- predict(Uni.m1, newdata = Validation.Population, type = "response")
       Univariate_PY2 <- predict(Uni.m2, newdata = Validation.Population, type = "response")
+      #Calculate the joint risks based on the marginal probabilities
       Validation.Population$Univariate_P11 <- Univariate_PY1 * Univariate_PY2
       Validation.Population$Univariate_P10 <- Univariate_PY1 * (1 - Univariate_PY2)
       Validation.Population$Univariate_P01 <- (1 - Univariate_PY1) * Univariate_PY2
       
       
-      #Hierarchical Related Regression
+      ## Hierarchical Related Regression (HRR)
       HRR <- Hierarchical.Related.CPM.fnc(DevelopmentData = IPD, 
-                                          TestData = Validation.Population,
-                                          K = K)
+                                          TestData = Validation.Population)
+      #Calculate the joint risks based on the marginal probabilities
       Validation.Population$HRR_P11 <- HRR$Pi_Y1 * HRR$Pi_Y2
       Validation.Population$HRR_P10 <- HRR$Pi_Y1 * (1 - HRR$Pi_Y2)
       Validation.Population$HRR_P01 <- (1 - HRR$Pi_Y1) * HRR$Pi_Y2
       
       
-      #Probabilistic Classifier Chain
+      ## Probabilistic Classifier Chain (PCC)
       PCC <- Probabilistic.Classifier.Chain.fnc(DevelopmentData = IPD, 
                                                 TestData = Validation.Population)
+      #Extract the joint risks, which this method obtains directly
       Validation.Population$PCC_P11 <- PCC$P11
       Validation.Population$PCC_P10 <- PCC$P10
       Validation.Population$PCC_P01 <- PCC$P01
       
       
-      #Multivariate Logistic Model (MLM)
+      ## Multinomial Logistic Regression (MLR)
+      MLR <- multinom(Y_Categories ~ X1 + X2, 
+                      data = IPD %>%
+                        mutate(Y_Categories = fct_relevel(factor(ifelse(Y1 == 0 & Y2 == 0, 
+                                                                        "(0,0)",
+                                                                        ifelse(Y1 == 1 & Y2 == 0,
+                                                                               "(1,0)",
+                                                                               ifelse(Y1 == 0 & Y2 == 1,
+                                                                                      "(0,1)",
+                                                                                      "(1,1)")))),
+                                                          c("(0,0)", "(1,0)", "(0,1)", "(1,1)"))))
+      #Predict the risk of each outcome combination in the validation cohort
+      MLR.predictions <- predict(MLR, newdata = Validation.Population, "probs")
+      #Extract the joint risks, which this method obtains directly
+      Validation.Population$MLR_P11 <- MLR.predictions[,"(1,1)"]
+      Validation.Population$MLR_P10 <- MLR.predictions[,"(1,0)"]
+      Validation.Population$MLR_P01 <- MLR.predictions[,"(0,1)"]
+      
+      
+      ## Multivariate Logistic Model (MLM)
       MLM <- suppressWarnings(Multivariate.Logistic.Reg.fnc(X = IPD %>% select(X1, X2), 
                                                             Y1 = IPD$Y1, 
                                                             Y2 = IPD$Y2))
+      #Predict the risk of each outcome in the validation cohort using matrix multiplication
       MLM_PY1 <- (1 + exp(-as.numeric((Validation.Population %>%
                                          select(starts_with("X")) %>%
                                          data.matrix()) %*% MLM$beta1)))^(-1) #P(y1=1 | X,beta_1)
       MLM_PY2 <- (1 + exp(-as.numeric((Validation.Population %>%
                                          select(starts_with("X")) %>%
                                          data.matrix()) %*% MLM$beta2)))^(-1) #P(y2=1 | X,beta_2)
-      Validation.Population$MLM_P11 <- ((MLM_PY1*MLM_PY2) + (MLM$rho12*sqrt(MLM_PY1*(1 - MLM_PY1)*MLM_PY2*(1 - MLM_PY2))))
-      Validation.Population$MLM_P10 <- ((MLM_PY1*(1 - MLM_PY2)) - (MLM$rho12*sqrt(MLM_PY1*(1 - MLM_PY1)*MLM_PY2*(1 - MLM_PY2))))
-      Validation.Population$MLM_P01 <- ((MLM_PY2*(1 - MLM_PY1)) - (MLM$rho12*sqrt(MLM_PY1*(1 - MLM_PY1)*MLM_PY2*(1 - MLM_PY2))))
+      #Calculate the joint risks, which this method obtains directly based on the marginal risks
+      Validation.Population$MLM_P11 <- ((MLM_PY1*MLM_PY2) + 
+                                          (MLM$rho12*sqrt(MLM_PY1*(1 - MLM_PY1)*MLM_PY2*(1 - MLM_PY2))))
+      Validation.Population$MLM_P10 <- ((MLM_PY1*(1 - MLM_PY2)) - 
+                                          (MLM$rho12*sqrt(MLM_PY1*(1 - MLM_PY1)*MLM_PY2*(1 - MLM_PY2))))
+      Validation.Population$MLM_P01 <- ((MLM_PY2*(1 - MLM_PY1)) - 
+                                          (MLM$rho12*sqrt(MLM_PY1*(1 - MLM_PY1)*MLM_PY2*(1 - MLM_PY2))))
       
       
-      #Multivariate Probit Model (MPM)
+      ## Multivariate Probit Model (MPM)
       BayesianProbitMultivariateModel <- jags.model( file = here::here("Code", "JAGSProbitModel.txt"), 
                                                      data = list(
                                                        "n" = nrow(IPD),
@@ -133,16 +165,18 @@ simulationcall.fnc <- function(iter = 100,
                                                                   "rho" = 0),
                                                      n.chains = 1, 
                                                      n.adapt = 1000)
+      #sample from the posterior distribution:
       samps <- coda.samples( BayesianProbitMultivariateModel, c('Beta','rho'), n.iter = 10000 )
       tidy.samps <- samps[[1]][5001:10000,] #set first 5000 samples as burn-in
-      post.means <- colMeans(tidy.samps)
+      post.means <- colMeans(tidy.samps) #take the posterior mean
+      #Predict the risk of each outcome in the validation cohort using posterior mean
       X.Beta.Y1 <- as.numeric(cbind(Validation.Population$X0, 
                                     Validation.Population$X1,
                                     Validation.Population$X2) %*% post.means[paste("Beta[", 1:3, ",1]", sep = "")])
       X.Beta.Y2 <- as.numeric(cbind(Validation.Population$X0, 
                                     Validation.Population$X1,
                                     Validation.Population$X2) %*% post.means[paste("Beta[", 1:3, ",2]", sep = "")])
-      
+      #Calculate the joint risks, which this method obtains directly based on the marginal risks and estimate of rho
       Validation.Population$MPM_P11 <- pbivnorm(x = cbind(X.Beta.Y1, X.Beta.Y2), 
                                                 rho = post.means["rho"])
       Validation.Population$MPM_P10 <- pbivnorm(x = cbind(X.Beta.Y1, -X.Beta.Y2), 
@@ -151,16 +185,18 @@ simulationcall.fnc <- function(iter = 100,
                                                 rho = -post.means["rho"])
       
       
-      #Multivariate Stacked Regression
+      ## Multivariate Stacked Regression (SR)
+      #Obtain the linear predictors of each outcome from the univariate models: f_1 and f_2 in the paper
       IPD$Univariate_LP1 <- predict(Uni.m1, newdata = IPD, type = "link")
       IPD$Univariate_LP2 <- predict(Uni.m2, newdata = IPD, type = "link")
+      #Use the linear predictors to fit a stacked regression model to each outcome seperately
       MultivariateStackedRegression.m1 <- glm(Y1 ~ Univariate_LP1 + Univariate_LP2, 
                                               data = IPD, 
                                               family = binomial(link = "logit"))
       MultivariateStackedRegression.m2 <- glm(Y2 ~ Univariate_LP1 + Univariate_LP2, 
                                               data = IPD, 
                                               family = binomial(link = "logit"))
-      
+      #Predict the risk of each outcome in the validation cohort
       SR_PY1 <- predict(MultivariateStackedRegression.m1, 
                         newdata = Validation.Population %>%
                           mutate(Univariate_LP1 = log(Univariate_PY1/(1 - Univariate_PY1)),
@@ -171,6 +207,7 @@ simulationcall.fnc <- function(iter = 100,
                           mutate(Univariate_LP1 = log(Univariate_PY1/(1 - Univariate_PY1)),
                                  Univariate_LP2 = log(Univariate_PY2/(1 - Univariate_PY2))), 
                         type = "response")
+      #Calculate the joint risks based on the marginal probabilities
       Validation.Population$SR_P11 <- SR_PY1 * SR_PY2
       Validation.Population$SR_P10 <- SR_PY1 * (1 - SR_PY2)
       Validation.Population$SR_P01 <- (1 - SR_PY1) * SR_PY2
@@ -180,18 +217,21 @@ simulationcall.fnc <- function(iter = 100,
       ## Model Validation
       ####-----------------
       
+      ## Extract relevant information from the validation cohort
       Predictions <- Validation.Population %>%
         select(Y1, Y2,
                Univariate_P11, Univariate_P10, Univariate_P01,
                HRR_P11, HRR_P10, HRR_P01,
                PCC_P11, PCC_P10, PCC_P01,
+               MLR_P11, MLR_P10, MLR_P01,
                MLM_P11, MLM_P10, MLM_P01,
                MPM_P11, MPM_P10, MPM_P01,
                SR_P11, SR_P10, SR_P01) %>%
-        mutate(Y11 = ifelse(Y1 == 1 & Y2 == 1, 1, 0),
-               Y10 = ifelse(Y1 == 1 & Y2 == 0, 1, 0),
-               Y01 = ifelse(Y1 == 0 & Y2 == 1, 1, 0),
+        mutate(Y11 = ifelse(Y1 == 1 & Y2 == 1, 1, 0), #define the observed joint outcome events
+               Y10 = ifelse(Y1 == 1 & Y2 == 0, 1, 0), #define the observed joint outcome events
+               Y01 = ifelse(Y1 == 0 & Y2 == 1, 1, 0), #define the observed joint outcome events
                
+               ## For each model, calculate predicted marginal risks based on the predicted joint risks:
                Univariate_Py1 = Univariate_P10 + Univariate_P11,
                Univariate_Py2 = Univariate_P01 + Univariate_P11,
                
@@ -200,6 +240,9 @@ simulationcall.fnc <- function(iter = 100,
                
                PCC_Py1 = PCC_P10 + PCC_P11,
                PCC_Py2 = PCC_P01 + PCC_P11,
+               
+               MLR_Py1 = MLR_P10 + MLR_P11,
+               MLR_Py2 = MLR_P01 + MLR_P11,
                
                MLM_Py1 = MLM_P10 + MLM_P11,
                MLM_Py2 = MLM_P01 + MLM_P11,
@@ -216,9 +259,9 @@ simulationcall.fnc <- function(iter = 100,
                ends_with("_Py1"), ends_with("_Py2"),
                ends_with("_P11"), ends_with("_P10"), ends_with("_P01"))
       
-      
+      ##Loop across each model, and for each estimate predictive performance of the marginal and joint outcomes:
       Results <- NULL
-      for (ModelName in c("Univariate", "HRR", "PCC", "MLM", "MPM", "SR")) {
+      for (ModelName in c("Univariate", "HRR", "PCC", "MLR", "MLM", "MPM", "SR")) {
         Results <- Results %>%
           bind_rows(Performance.fnc(ObservedOutcome = Predictions$Y1, 
                                     PredictedRisk = eval(parse(text = paste("Predictions$",
@@ -259,7 +302,6 @@ simulationcall.fnc <- function(iter = 100,
       ####-----------------
       ## Store Performance Results
       ####-----------------
-      
       Results <- Results %>%
         mutate("Iteration" = iteration,
                "rho_latent" = rho,
@@ -284,20 +326,22 @@ simulationcall.fnc <- function(iter = 100,
                "AUC_P11", "AUC_P10", "AUC_P01",
                "BrierScore_P11", "BrierScore_P10", "BrierScore_P01")
       
+      ##Write the results to the text file before starting the next iteration
       write.table(Results,
                   here::here("Data", paste(filename, ".txt", sep = "")),
                   append = TRUE,
                   sep = "|",
                   row.names = FALSE,
                   col.names = FALSE)
-      rm(Results)
+      rm(Results) #clear results ready for the next iteration
       
-      
+      ##Update the progress bar
       info <- sprintf(paste("Iterations %d%% Completed"), round((iteration/(iter)*100)))
       setWinProgressBar(pb, iteration/((iter))*100, label = info)
     }
-    close(pb) 
+    close(pb) #close the progress bar
     
+    ##Print a message to the concole to update on simulation progress
     print(paste("Simulation for rho equal to", rho, "complete", sep = " "))
   }
 }
@@ -318,6 +362,7 @@ DataGenerating.fnc <- function(N, beta_1_true, beta_2_true, rho) {
     return( log(X/(1 - X)) )
   }
   
+  ## Generate independent covariates
   X <- cbind(X0 = 1,
              X1 = rnorm(N, 0, 1), 
              X2 = rnorm(N, 0, 1))
@@ -325,8 +370,9 @@ DataGenerating.fnc <- function(N, beta_1_true, beta_2_true, rho) {
   #Generate random vectors from standard multivariate normal distribution with inputted correlation, rho
   Z <- MASS::mvrnorm(n = N, mu = c(0,0), 
                      Sigma = toeplitz(c(1, rho)))
-  Epsilon <- apply(pnorm(Z), 2, Inverse.Logistic.CDF) #aaply the inverse probability transform
+  Epsilon <- apply(pnorm(Z), 2, Inverse.Logistic.CDF) #apply the inverse probability transform
   
+  ## Define the IPD and define the two outcomes based on the inverse probability transform
   IPD <- data.frame("ID" = seq(from = 1, to = N, by = 1),
                     X) %>%
     mutate(LP1 = as.vector(X %*% beta_1_true),
@@ -335,7 +381,7 @@ DataGenerating.fnc <- function(N, beta_1_true, beta_2_true, rho) {
            Y1 = ifelse(Epsilon[,1] <= LP1, 1, 0),
            Y2 = ifelse(Epsilon[,2] <= LP2, 1, 0))
   
-  return(IPD)
+  return(IPD) #return the simulated IPD to the main analysis function
 }
 
 
@@ -343,57 +389,40 @@ DataGenerating.fnc <- function(N, beta_1_true, beta_2_true, rho) {
 ## Function to fit the Hierarchical Related CPM
 ####-----------------------------------------------------------------------------------------
 
-Hierarchical.Related.CPM.fnc <- function(DevelopmentData, TestData, K) {
+Hierarchical.Related.CPM.fnc <- function(DevelopmentData, TestData) {
   #Inputs: DevelopmentData = data on which to derive the Hierarchical Related CPM
   #        TestData = data on which to predict risk for each outcome (marginal), 
-  #        K = the number of k-fold cross validation: K = nrow(DevelopmentData) is leave-one-out CV
   
-  #Perform leave-one-out cross validation to obtain estimates of pi1 and pi2 from each 
-  # 'initial' model in each 'permutation' stage
-  DevelopmentData$Pi1_m1 <- NA
-  DevelopmentData$Pi2_m2 <- NA
-  
-  folds <- cut(seq(1,nrow(DevelopmentData)), breaks = K, labels = FALSE)
-  cv.pb <- txtProgressBar()
-  print("Cross Validation Progress for Hierarchical Related CPM")
-  for (i in 1:K) {
-    testIndexes <- which(folds == i, arr.ind = TRUE)
-    
-    CV.Data <- DevelopmentData %>% slice(-testIndexes)
-    
-    m1_Pi1 <- glm(Y1 ~ X1 + X2, data = CV.Data, family = binomial(link = "logit"))
-    DevelopmentData$Pi1_m1[testIndexes] <- predict(m1_Pi1, 
-                                                   newdata = DevelopmentData %>% 
-                                                     slice(testIndexes), 
-                                                   type = "response")
-    
-    
-    m2_Pi2 <- glm(Y2 ~ X1 + X2, data = CV.Data, family = binomial(link = "logit"))
-    DevelopmentData$Pi2_m2[testIndexes] <- predict(m2_Pi2, 
-                                                   newdata = DevelopmentData %>%
-                                                     slice(testIndexes), 
-                                                   type = "response")
-    
-    setTxtProgressBar(cv.pb, i/K)
-  }; close(cv.pb)
-  ##Now fit the models to the full development data to arrive at parameter estimates for future prediction
-  #In the first 'permutation' we start with estimating Y1
+  ## In the first 'permutation' we start with estimating Y1
   m1_Pi1 <- glm(Y1 ~ X1 + X2, data = DevelopmentData, family = binomial(link = "logit"))
+  DevelopmentData$Pi1_m1 <- predict(m1_Pi1, 
+                                    newdata = DevelopmentData, 
+                                    type = "response")
+  #...then use the predicted risk for Y1 to estimate Y2
   m1_Pi2 <- glm(Y2 ~ X1 + X2 + Pi1_m1, data = DevelopmentData, family = binomial(link = "logit"))
-  #In the second 'permutation' we start with estimating Y2
+  
+  
+  ## In the second 'permutation' we start with estimating Y2
   m2_Pi2 <- glm(Y2 ~ X1 + X2, data = DevelopmentData, family = binomial(link = "logit"))
+  DevelopmentData$Pi2_m2 <- predict(m2_Pi2, 
+                                    newdata = DevelopmentData, 
+                                    type = "response")
+  #...then use the predicted risk for Y2 to estimate Y1
   m2_Pi1 <- glm(Y1 ~ X1 + X2 + Pi2_m2, data = DevelopmentData, family = binomial(link = "logit"))
   
   
-  #Now predict for each observation in the TestData
+  ## Now use each permutation model to predict risk of Y1 or Y2 for each observation in the TestData
   TestData$Pi1_m1 <- predict(m1_Pi1, newdata = TestData, type = "response")
   TestData$Pi2_m1 <- predict(m1_Pi2, newdata = TestData, type = "response")
   TestData$Pi2_m2 <- predict(m2_Pi2, newdata = TestData, type = "response")
   TestData$Pi1_m2 <- predict(m2_Pi1, newdata = TestData, type = "response")
   
+  ## Take an ensemble of the predicted risks from each permutation model to obtaine the
+  # overall (marginal) predicted risk 
   Pi_Y1 <- apply(cbind(TestData$Pi1_m1, TestData$Pi1_m2), 1, mean)
   Pi_Y2 <- apply(cbind(TestData$Pi2_m1, TestData$Pi2_m2), 1, mean)
   
+  ## Return the results
   return(list("m1_Pi1" = m1_Pi1,
               "m1_Pi2" = m1_Pi2,
               "m2_Pi1" = m2_Pi1,
@@ -422,8 +451,7 @@ Probabilistic.Classifier.Chain.fnc <- function(DevelopmentData, TestData) {
   
   
   ##Now predict for each observation in the TestData
-  
-  #only extract the covaraite information (i.e. dont use the observed reponses to mimic prediction time):
+  #only extract the covaraite information (i.e. dont use the observed reponses to mimic real prediction):
   TestData <- TestData %>% select(X1, X2) 
   
   P11_m1 <- predict(m1_Pi1, newdata = TestData, type = "response") *
@@ -441,10 +469,12 @@ Probabilistic.Classifier.Chain.fnc <- function(DevelopmentData, TestData) {
     (1 - predict(m2_Pi1, newdata = TestData %>% mutate(Y2 = 1), type = "response")) #condition on Y2=1
   
   
+  ## Apply the ensemble to estimate each joint risk
   P11 <- apply(cbind(P11_m1, P11_m2), 1, mean)
   P10 <- apply(cbind(P10_m1, P10_m2), 1, mean)
   P01 <- apply(cbind(P01_m1, P01_m2), 1, mean)
   
+  ## Return the results
   return(list("P11" = P11,
               "P10" = P10,
               "P01" = P01))
@@ -457,7 +487,8 @@ Probabilistic.Classifier.Chain.fnc <- function(DevelopmentData, TestData) {
 ####-----------------------------------------------------------------------------------------
 Multivariate.Logistic.Reg.fnc <- function(X, Y1, Y2) {
   
-  #Define log-likelihood function for the Multivariate Logistic Regression model
+  ## Define log-likelihood function for the Multivariate Logistic Regression model
+  #see Gumbel EJ. "Bivariate Logistic Distributions" (1961) for details of the likelihood
   loglike <- function(pars, X, Y1, Y2) {
     
     beta1 <- pars[1:ncol(X)]
@@ -474,6 +505,7 @@ Multivariate.Logistic.Reg.fnc <- function(X, Y1, Y2) {
     P01 <- ((F2*S1) - (rho12*sqrt(F1*S1*F2*S2)))
     P00 <- ((S1*S2) + (rho12*sqrt(F1*S1*F2*S2))) 
     
+    ## Correct any rounding issues producing small negative numbers: turn to very small positive
     if (any(P11 < 0)) {
       P11[which(P11 < 0)] <- 10^-10
       
@@ -493,12 +525,10 @@ Multivariate.Logistic.Reg.fnc <- function(X, Y1, Y2) {
     return(-sum(ll)) #return minus log likelihood as optim minimises
   }
   
-  X <- data.matrix(X)
-  
-  m1 <- glm(Y1 ~ X, family = binomial(link = "logit"))
-  m2 <- glm(Y2 ~ X, family = binomial(link = "logit"))
-  
-  
+  X <- data.matrix(X) #Turn data into matrix ready for optim
+  m1 <- glm(Y1 ~ X, family = binomial(link = "logit")) #obtain initial estimates of \beta_1
+  m2 <- glm(Y2 ~ X, family = binomial(link = "logit")) #obtain initial estimates of \beta_2
+  ## Pass relevant information to optim and use Nelder-Mead to estimate parameters
   maxlike <- optim(par = c(as.numeric(coef(m1)), 
                            as.numeric(coef(m2)), 
                            0),
@@ -507,6 +537,7 @@ Multivariate.Logistic.Reg.fnc <- function(X, Y1, Y2) {
                    X = cbind(1, X), #apend intercept to data
                    Y1 = Y1, Y2 = Y2)
   
+  ## Extract the relevant parameter estimates from optim
   beta1 <- maxlike$par[1:ncol(cbind(1, X))]
   beta2 <- maxlike$par[(ncol(cbind(1, X)) + 1):(2*ncol(cbind(1, X)))]
   rho12 <- maxlike$par[(2*ncol(cbind(1, X))) + 1]
@@ -523,14 +554,18 @@ Multivariate.Logistic.Reg.fnc <- function(X, Y1, Y2) {
 Performance.fnc <- function(ObservedOutcome, PredictedRisk, OutcomeSubscript) {
   require(pROC)
   
-  LP <- log(PredictedRisk / (1 - PredictedRisk))
+  LP <- log(PredictedRisk / (1 - PredictedRisk)) #convert predicted risks onto linear predictor scale
   
+  #Estimate calibration intercept (i.e. calibration-in-the-large)
   CalInt.model <- glm(ObservedOutcome ~ offset(LP), family = binomial(link = "logit"))
+  #Estimate calibration slope
   CalSlope.model <- glm(ObservedOutcome ~ LP, family = binomial(link = "logit"))
+  #Dicrimination
   AUC <- as.numeric(roc(response = ObservedOutcome, predictor = PredictedRisk)$auc)
-  
+  #Brier Score
   BrierScore <- 1/length(ObservedOutcome) * (sum((PredictedRisk - ObservedOutcome)^2))
   
+  ## Store performance results in a data.frame and return
   Results <- data.frame(as.numeric(coef(CalInt.model)),
                         as.numeric(coef(CalSlope.model)[2]),
                         AUC,
