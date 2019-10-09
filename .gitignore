@@ -7,8 +7,9 @@
 Joint\ Logistic\ CPMs.R
 Simple\ Linear\ Example.R
 
-#Ignore R script to analyse the MIMIC data
+#Ignore R script to analyse the MIMIC data and ignore the mimic data file itself
 MIMIC\ Analysis.R
+mimiccohort.csv
 
 #Ignore the Outputs folder, which contains draft manuscripts
 Outputs/
