@@ -108,7 +108,10 @@ SELECT ie.subject_id, ie.hadm_id, ie.icustay_id
 , lfd.WBC_Mean
 , lfd.WBC_Max
 -- Calculate baseline eGFR using the modification of diet in renal disease equation (Levey et al):
-, CASE WHEN adm.ethnicity IN
+, CASE 
+   WHEN (ROUND((cast(ie.intime as date) - cast(pat.dob as date))/365.242, 2)) > 89 --if age over 89 then need to assume 89 due to additions that MIMIC add to ages over 89 (i.e. adding 300 years)
+   THEN 
+   CASE WHEN adm.ethnicity IN
   (
       'BLACK/AFRICAN AMERICAN' 
     , 'BLACK/CAPE VERDEAN' 
@@ -117,7 +120,7 @@ SELECT ie.subject_id, ie.hadm_id, ie.icustay_id
     , 'CARIBBEAN ISLAND' 
   ) AND pat.gender = 'F' 
     AND ROUND((cast(ie.intime as date) - cast(pat.dob as date))/365.242, 2) > 0
-  THEN 175 * (lfd.CREATININE_Min^(-1.154)) * (ROUND((cast(ie.intime as date) - cast(pat.dob as date))/365.242, 2)^(-0.203)) * 0.742 * 1.212
+  THEN 175 * (lfd.CREATININE_Min^(-1.154)) * (89^(-0.203)) * 0.742 * 1.212
   WHEN adm.ethnicity NOT IN
   (
       'BLACK/AFRICAN AMERICAN' 
@@ -127,7 +130,7 @@ SELECT ie.subject_id, ie.hadm_id, ie.icustay_id
     , 'CARIBBEAN ISLAND' 
   ) AND pat.gender = 'F' 
     AND ROUND((cast(ie.intime as date) - cast(pat.dob as date))/365.242, 2) > 0
-  THEN 175 * (lfd.CREATININE_Min^(-1.154)) * (ROUND((cast(ie.intime as date) - cast(pat.dob as date))/365.242, 2)^(-0.203)) * 0.742
+  THEN 175 * (lfd.CREATININE_Min^(-1.154)) * (89^(-0.203)) * 0.742
   WHEN adm.ethnicity IN
   (
       'BLACK/AFRICAN AMERICAN' 
@@ -137,7 +140,7 @@ SELECT ie.subject_id, ie.hadm_id, ie.icustay_id
     , 'CARIBBEAN ISLAND' 
   ) AND pat.gender <> 'F' 
     AND ROUND((cast(ie.intime as date) - cast(pat.dob as date))/365.242, 2) > 0
-  THEN 175 * (lfd.CREATININE_Min^(-1.154)) * (ROUND((cast(ie.intime as date) - cast(pat.dob as date))/365.242, 2)^(-0.203)) * 1.212
+  THEN 175 * (lfd.CREATININE_Min^(-1.154)) * (89^(-0.203)) * 1.212
   WHEN adm.ethnicity NOT IN
   (
       'BLACK/AFRICAN AMERICAN' 
@@ -147,9 +150,56 @@ SELECT ie.subject_id, ie.hadm_id, ie.icustay_id
     , 'CARIBBEAN ISLAND' 
   ) AND pat.gender <> 'F' 
     AND ROUND((cast(ie.intime as date) - cast(pat.dob as date))/365.242, 2) > 0
-  THEN 175 * (lfd.CREATININE_Min^(-1.154)) * (ROUND((cast(ie.intime as date) - cast(pat.dob as date))/365.242, 2)^(-0.203))
+  THEN 175 * (lfd.CREATININE_Min^(-1.154)) * (89^(-0.203))
   ELSE null --eGFR not defined for age = 0 years: i.e. if ROUND((cast(ie.intime as date) - cast(pat.dob as date))/365.242, 2) = 0
-  END AS baseline_eGFR
+  END
+  
+ ELSE  
+  CASE WHEN adm.ethnicity IN
+  (
+      'BLACK/AFRICAN AMERICAN' 
+    , 'BLACK/CAPE VERDEAN' 
+    , 'BLACK/HAITIAN' 
+    , 'BLACK/AFRICAN' 
+    , 'CARIBBEAN ISLAND' 
+  ) AND pat.gender = 'F' 
+    AND ROUND((cast(ie.intime as date) - cast(pat.dob as date))/365.242, 2) > 0
+  THEN 175 * (lfd.CREATININE_Min^(-1.154)) * ((ROUND((cast(ie.intime as date) - cast(pat.dob as date))/365.242, 2))^(-0.203)) * 0.742 * 1.212
+  WHEN adm.ethnicity NOT IN
+  (
+      'BLACK/AFRICAN AMERICAN' 
+    , 'BLACK/CAPE VERDEAN' 
+    , 'BLACK/HAITIAN' 
+    , 'BLACK/AFRICAN' 
+    , 'CARIBBEAN ISLAND' 
+  ) AND pat.gender = 'F' 
+    AND ROUND((cast(ie.intime as date) - cast(pat.dob as date))/365.242, 2) > 0
+  THEN 175 * (lfd.CREATININE_Min^(-1.154)) * ((ROUND((cast(ie.intime as date) - cast(pat.dob as date))/365.242, 2))^(-0.203)) * 0.742
+  WHEN adm.ethnicity IN
+  (
+      'BLACK/AFRICAN AMERICAN' 
+    , 'BLACK/CAPE VERDEAN' 
+    , 'BLACK/HAITIAN' 
+    , 'BLACK/AFRICAN' 
+    , 'CARIBBEAN ISLAND' 
+  ) AND pat.gender <> 'F' 
+    AND ROUND((cast(ie.intime as date) - cast(pat.dob as date))/365.242, 2) > 0
+  THEN 175 * (lfd.CREATININE_Min^(-1.154)) * ((ROUND((cast(ie.intime as date) - cast(pat.dob as date))/365.242, 2))^(-0.203)) * 1.212
+  WHEN adm.ethnicity NOT IN
+  (
+      'BLACK/AFRICAN AMERICAN' 
+    , 'BLACK/CAPE VERDEAN' 
+    , 'BLACK/HAITIAN' 
+    , 'BLACK/AFRICAN' 
+    , 'CARIBBEAN ISLAND' 
+  ) AND pat.gender <> 'F' 
+    AND ROUND((cast(ie.intime as date) - cast(pat.dob as date))/365.242, 2) > 0
+  THEN 175 * (lfd.CREATININE_Min^(-1.154)) * ((ROUND((cast(ie.intime as date) - cast(pat.dob as date))/365.242, 2))^(-0.203))
+  ELSE null --eGFR not defined for age = 0 years: i.e. if ROUND((cast(ie.intime as date) - cast(pat.dob as date))/365.242, 2) = 0
+  END 
+END AS baseline_eGFR
+  
+
 
 -- First 24 hour vital sign results (vfd prefix = "vital first day")
 , vfd.HeartRate_Min
