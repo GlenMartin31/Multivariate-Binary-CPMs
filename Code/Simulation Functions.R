@@ -437,7 +437,7 @@ Hierarchical.Related.CPM.fnc <- function(DevelopmentData, TestData) {
 ####-----------------------------------------------------------------------------------------
 
 Probabilistic.Classifier.Chain.fnc <- function(DevelopmentData, TestData) {
-  #Inputs: DevelopmentData = data on which to derive the Hierarchical Related CPM
+  #Inputs: DevelopmentData = data on which to derive the Probabilistic Classifier Chain CPM
   #        TestData = data on which to predict risk for each outcome (marginal)
   
   ##Fit the models to the full development data to arrive at parameter estimates for future prediction
