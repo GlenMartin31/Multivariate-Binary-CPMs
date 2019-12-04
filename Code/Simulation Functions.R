@@ -183,9 +183,8 @@ simulationcall.fnc <- function(iter = 100,
                                           (MLM$rho12 * sqrt(MLM_PY1 * (1 - MLM_PY1) * MLM_PY2 * (1 - MLM_PY2))))
       Validation.Population$MLM_P01 <- ((MLM_PY2 * (1 - MLM_PY1)) - 
                                           (MLM$rho12 * sqrt(MLM_PY1 * (1 - MLM_PY1) * MLM_PY2 * (1 - MLM_PY2))))
-      Validation.Population$MLM_P00 <- (1 - (Validation.Population$MLM_P11 + 
-                                               Validation.Population$MLM_P10 + 
-                                               Validation.Population$MLM_P01))
+      Validation.Population$MLM_P00 <- (((1 - MLM_PY1) * (1 - MLM_PY2)) + 
+                                          (MLM$rho12 * sqrt(MLM_PY1 * (1 - MLM_PY1) * MLM_PY2 * (1 - MLM_PY2))))
       
       
       ## Multivariate Probit Model (MPM)
@@ -481,14 +480,19 @@ Multivariate.Logistic.Reg.fnc <- function(X, Y1, Y2) {
     P01 <- ((F2*S1) - (rho12*sqrt(F1*S1*F2*S2)))
     P00 <- ((S1*S2) + (rho12*sqrt(F1*S1*F2*S2))) 
     
-    ## Correct any very very small probabilities causing NaNs in log(Pij) in the log-likelihood below:
-    P11[which(P11 < 1e-10)] <- 1e-10
-    P10[which(P10 < 1e-10)] <- 1e-10
-    P01[which(P01 < 1e-10)] <- 1e-10
-    P00[which(P00 < 1e-10)] <- 1e-10
-    
-    ll <- (Y1*Y2*log(P11)) + (Y1*(1 - Y2)*log(P10)) + ((1 - Y1)*Y2*log(P01)) + ((1 - Y1)*(1 - Y2)*log(P00))
-    
+    ll <- rep(NA, length(Y1))
+    for (i in 1:length(Y1)) {
+      #if any of the joint probabilities are out of range (due to constraints on rho12), then set log-likelihood as 
+      # large value to ensure this combination of parameters (i.e. rho12) is not choosen as optimal
+      if (P11[i] < 0 | P10[i] < 0 | P01[i] < 0 | P00[i] < 0) {
+        ll[i] <- -Inf 
+      }else {
+        ll[i] <- (Y1[i]*Y2[i]*log(P11[i])) + 
+          (Y1[i]*(1 - Y2[i])*log(P10[i])) + 
+          ((1 - Y1[i])*Y2[i]*log(P01[i])) + 
+          ((1 - Y1[i])*(1 - Y2[i])*log(P00[i]))
+      }
+    }
     return(-sum(ll)) #return minus log likelihood as optim minimises
   }
   
@@ -502,7 +506,8 @@ Multivariate.Logistic.Reg.fnc <- function(X, Y1, Y2) {
                    fn = loglike,
                    method = "Nelder-Mead",
                    X = cbind(1, X), #apend intercept to data
-                   Y1 = Y1, Y2 = Y2)
+                   Y1 = Y1, Y2 = Y2,
+                   control = list(maxit = 5000))
   
   ## Extract the relevant parameter estimates from optim
   beta1 <- maxlike$par[1:ncol(cbind(1, X))]
