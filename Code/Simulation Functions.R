@@ -176,6 +176,20 @@ simulationcall.fnc <- function(iter = 100,
       MLM_PY2 <- (1 + exp(-as.numeric((Validation.Population %>%
                                          select(starts_with("X")) %>%
                                          data.matrix()) %*% MLM$beta2)))^(-1) #P(y2=1 | X,beta_2)
+      #Check that the estimated value of rho12 is within the correct constraints. Note that the maximum value
+      # that rho12 can take is determined by the marginal probabilities. As such, this might differ to that from
+      # the IPD. As such, we here take the posistion that if rho12 is larger than the maximum limit within the 
+      # validation set, then we assign it to be at the upper limit. This ensures that all joint probabilities lie 
+      # in [0,1] and all sum to 1. The limit is calculated by the fact that P11, P10, P01 and P00 all must be >0. 
+      # By the forumla, rho12 can only make P10 or P01 <0 (since we subtract rho12*sqrt(...)). 
+      # Working backwards from this, leads to the below if statement conditions.
+      # NOTE: this is only relevant at larger value of rho.vals 
+      if (MLM$rho12 > min(min((MLM_PY1 * (1 - MLM_PY2)) / sqrt(MLM_PY1 * (1 - MLM_PY1) * MLM_PY2 * (1 - MLM_PY2))),
+                          min((MLM_PY2 * (1 - MLM_PY1)) / sqrt(MLM_PY1 * (1 - MLM_PY1) * MLM_PY2 * (1 - MLM_PY2))))) {
+        #Set at the upper limit: in most cases only very small difference between IPD estiamted rho12 and this limit;
+        MLM$rho12 <- min(min((MLM_PY1 * (1 - MLM_PY2)) / sqrt(MLM_PY1 * (1 - MLM_PY1) * MLM_PY2 * (1 - MLM_PY2))),
+                         min((MLM_PY2 * (1 - MLM_PY1)) / sqrt(MLM_PY1 * (1 - MLM_PY1) * MLM_PY2 * (1 - MLM_PY2))))
+      }
       #Calculate the joint risks, which this method obtains directly based on the marginal risks
       Validation.Population$MLM_P11 <- ((MLM_PY1 * MLM_PY2) + 
                                           (MLM$rho12 * sqrt(MLM_PY1 * (1 - MLM_PY1) * MLM_PY2 * (1 - MLM_PY2))))
