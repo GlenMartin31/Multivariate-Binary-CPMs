@@ -21,7 +21,7 @@ SummaryResults <- Results %>%
          starts_with("CalInt_"),
          starts_with("CalSlope_"),
          starts_with("AUC_"), 
-         starts_with("BrierScore_")) %>%
+         starts_with("MSE_")) %>%
   group_by(Model, rho_latent) %>%
   summarise_all(list("mean" = mean, "sd" = sd)) %>%
   select(-starts_with("Iteration"))
@@ -44,7 +44,7 @@ SummaryResults %>%
            Outcome == "P11") %>%
   ungroup() %>%
   mutate(Model = fct_relevel(Model,
-                             c("Univariate", "HRR", "PCC", "MLR", "SR", "MLM", "MPM"))) %>%
+                             c("Univariate", "SR", "PCC", "MLR", "MLM", "MPM"))) %>%
   ggplot(aes(x = Model, y = mean)) +
   facet_wrap(~Outcome + rho_latent, scales = "fixed", nrow = 3) +
   geom_point() +
@@ -52,7 +52,7 @@ SummaryResults %>%
   geom_abline(intercept = 0, slope = 0, linetype = "dashed") +
   theme_bw(base_size = 12) + 
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  xlab("Model") + ylab("Calibration Intercept")
+  xlab("Model") + ylab("Calibration-in-the-large")
 
 ggsave(here::here("Outputs", "Manuscript", "Fig1_CalibrationInt.tiff"), 
        height = 7, width = 8, units = "in", dpi = 300)
@@ -70,7 +70,7 @@ SummaryResults %>%
            Outcome == "PY2") %>%
   ungroup() %>%
   mutate(Model = fct_relevel(Model,
-                             c("Univariate", "HRR", "PCC", "MLR", "SR", "MLM", "MPM"))) %>%
+                             c("Univariate", "SR", "PCC", "MLR", "MLM", "MPM"))) %>%
   ggplot(aes(x = Model, y = mean)) +
   facet_wrap(~Outcome + rho_latent, scales = "fixed", nrow = 2) +
   geom_point() +
@@ -78,7 +78,7 @@ SummaryResults %>%
   geom_abline(intercept = 0, slope = 0, linetype = "dashed") +
   theme_bw(base_size = 12) + 
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  xlab("Model") + ylab("Calibration Intercept")
+  xlab("Model") + ylab("Calibration-in-the-large")
 
 
 
@@ -99,7 +99,7 @@ SummaryResults %>%
            Outcome == "P11") %>%
   ungroup() %>%
   mutate(Model = fct_relevel(Model,
-                             c("Univariate", "HRR", "PCC", "MLR", "SR", "MLM", "MPM"))) %>%
+                             c("Univariate", "SR", "PCC", "MLR", "MLM", "MPM"))) %>%
   ggplot(aes(x = Model, y = mean)) +
   facet_wrap(~Outcome + rho_latent, scales = "fixed", nrow = 3) +
   geom_point() +
@@ -125,7 +125,7 @@ SummaryResults %>%
            Outcome == "PY2") %>%
   ungroup() %>%
   mutate(Model = fct_relevel(Model,
-                             c("Univariate", "HRR", "PCC", "MLR", "SR", "MLM", "MPM"))) %>%
+                             c("Univariate", "SR", "PCC", "MLR", "MLM", "MPM"))) %>%
   ggplot(aes(x = Model, y = mean)) +
   facet_wrap(~Outcome + rho_latent, scales = "fixed", nrow = 2) +
   geom_point() +
@@ -153,7 +153,7 @@ SummaryResults %>%
            Outcome == "P11") %>%
   ungroup() %>%
   mutate(Model = fct_relevel(Model,
-                             c("Univariate", "HRR", "PCC", "MLR", "SR", "MLM", "MPM"))) %>%
+                             c("Univariate", "SR", "PCC", "MLR", "MLM", "MPM"))) %>%
   ggplot(aes(x = Model, y = mean)) +
   facet_wrap(~Outcome + rho_latent, scales = "fixed", nrow = 3) +
   geom_point() +
@@ -178,7 +178,7 @@ SummaryResults %>%
            Outcome == "PY2") %>%
   ungroup() %>%
   mutate(Model = fct_relevel(Model,
-                             c("Univariate", "HRR", "PCC", "MLR", "SR", "MLM", "MPM"))) %>%
+                             c("Univariate", "SR", "PCC", "MLR", "MLM", "MPM"))) %>%
   ggplot(aes(x = Model, y = mean)) +
   facet_wrap(~Outcome + rho_latent, scales = "fixed", nrow = 2) +
   geom_point() +
@@ -189,14 +189,14 @@ SummaryResults %>%
 
 
 ####-----------------------------------------------------------------------------------------
-## Brier Score plots
+## MSE plots
 ####-----------------------------------------------------------------------------------------
 
 #Joint Risk
 SummaryResults %>% 
-  select(Model, rho_latent, starts_with("BrierScore_")) %>%
+  select(Model, rho_latent, starts_with("MSE_")) %>%
   gather(key = "Estimate", value, -Model, -rho_latent) %>%
-  extract("Estimate", c("Outcome", "Quantity"), "BrierScore_([A-Z0-9]+)_([a-z]+)") %>%
+  extract("Estimate", c("Outcome", "Quantity"), "MSE_([A-Z0-9]+)_([a-z]+)") %>%
   spread(Quantity, value) %>%
   mutate(lower = (mean - (1.96*sd)),
          upper = (mean + (1.96*sd))) %>%
@@ -205,23 +205,23 @@ SummaryResults %>%
            Outcome == "P11") %>%
   ungroup() %>%
   mutate(Model = fct_relevel(Model,
-                             c("Univariate", "HRR", "PCC", "MLR", "SR", "MLM", "MPM"))) %>%
+                             c("Univariate", "SR", "PCC", "MLR", "MLM", "MPM"))) %>%
   ggplot(aes(x = Model, y = mean)) +
   facet_wrap(~Outcome + rho_latent, scales = "fixed", nrow = 3) +
   geom_point() +
   geom_errorbar(aes(ymin = lower, ymax = upper)) +
   theme_bw(base_size = 12) + 
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
-  xlab("Model") + ylab("Brier Score")
+  xlab("Model") + ylab("MSE")
 
-ggsave(here::here("Outputs", "Manuscript", "Fig4_BrierScore.tiff"), 
+ggsave(here::here("Outputs", "Manuscript", "Fig4_MSE.tiff"), 
        height = 7, width = 8, units = "in", dpi = 300)
 
 #Marginal Risk
 SummaryResults %>% 
-  select(Model, rho_latent, starts_with("BrierScore_")) %>%
+  select(Model, rho_latent, starts_with("MSE_")) %>%
   gather(key = "Estimate", value, -Model, -rho_latent) %>%
-  extract("Estimate", c("Outcome", "Quantity"), "BrierScore_([A-Z0-9]+)_([a-z]+)") %>%
+  extract("Estimate", c("Outcome", "Quantity"), "MSE_([A-Z0-9]+)_([a-z]+)") %>%
   spread(Quantity, value) %>%
   mutate(lower = (mean - (1.96*sd)),
          upper = (mean + (1.96*sd))) %>%
@@ -229,12 +229,220 @@ SummaryResults %>%
            Outcome == "PY2") %>%
   ungroup() %>%
   mutate(Model = fct_relevel(Model,
-                             c("Univariate", "HRR", "PCC", "MLR", "SR", "MLM", "MPM"))) %>%
+                             c("Univariate", "SR", "PCC", "MLR", "MLM", "MPM"))) %>%
   ggplot(aes(x = Model, y = mean)) +
   facet_wrap(~Outcome + rho_latent, scales = "fixed", nrow = 2) +
   geom_point() +
   geom_errorbar(aes(ymin = lower, ymax = upper)) +
   theme_bw(base_size = 12) + 
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
-  xlab("Model") + ylab("Brier Score")
+  xlab("Model") + ylab("MSE")
+
+
+
+
+####-----------------------------------------------------------------------------------------
+## Sensitivity analysis: simulation with lower marginal event proportions
+####-----------------------------------------------------------------------------------------
+
+library(tidyverse)
+Results <- read.table(here::here("Data", "SimulationResults_LowerMarginalProportion.txt"), sep = "|", header = TRUE)
+
+mean(Results$Obs_Py1)
+mean(Results$Obs_Py2)
+
+#Now plot the performance results across all simulation scenarios
+SummaryResults <- Results %>%
+  select(Iteration, Model, rho_latent, 
+         starts_with("CalInt_"),
+         starts_with("CalSlope_"),
+         starts_with("AUC_"), 
+         starts_with("MSE_")) %>%
+  group_by(Model, rho_latent) %>%
+  summarise_all(list("mean" = mean, "sd" = sd)) %>%
+  select(-starts_with("Iteration"))
+
+
+#Joint Risks - CALIBRATION INTERCEPT
+SummaryResults %>% 
+  select(Model, rho_latent, starts_with("CalInt_")) %>%
+  gather(key = "Estimate", value = "value", -Model, -rho_latent) %>%
+  extract("Estimate", c("Outcome", "Quantity"), "CalInt_([A-Z0-9]+)_([a-z]+)") %>%
+  spread(Quantity, value) %>%
+  mutate(lower = (mean - (1.96*sd)),
+         upper = (mean + (1.96*sd))) %>%
+  filter(Outcome == "P01" |
+           Outcome == "P10" |
+           Outcome == "P11") %>%
+  ungroup() %>%
+  mutate(Model = fct_relevel(Model,
+                             c("Univariate", "SR", "PCC", "MLR", "MLM", "MPM"))) %>%
+  ggplot(aes(x = Model, y = mean)) +
+  facet_wrap(~Outcome + rho_latent, scales = "fixed", nrow = 3) +
+  geom_point() +
+  geom_errorbar(aes(ymin = lower, ymax = upper)) +
+  geom_abline(intercept = 0, slope = 0, linetype = "dashed") +
+  theme_bw(base_size = 12) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  xlab("Model") + ylab("Calibration Intercept")
+
+
+#Marginal Risks - CALIBRATION INTERCEPT
+SummaryResults %>% 
+  select(Model, rho_latent, starts_with("CalInt_")) %>%
+  gather(key = "Estimate", value = "value", -Model, -rho_latent) %>%
+  extract("Estimate", c("Outcome", "Quantity"), "CalInt_([A-Z0-9]+)_([a-z]+)") %>%
+  spread(Quantity, value) %>%
+  mutate(lower = (mean - (1.96*sd)),
+         upper = (mean + (1.96*sd))) %>%
+  filter(Outcome == "PY1" |
+           Outcome == "PY2") %>%
+  ungroup() %>%
+  mutate(Model = fct_relevel(Model,
+                             c("Univariate", "SR", "PCC", "MLR", "MLM", "MPM"))) %>%
+  ggplot(aes(x = Model, y = mean)) +
+  facet_wrap(~Outcome + rho_latent, scales = "fixed", nrow = 2) +
+  geom_point() +
+  geom_errorbar(aes(ymin = lower, ymax = upper)) +
+  geom_abline(intercept = 0, slope = 0, linetype = "dashed") +
+  theme_bw(base_size = 12) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  xlab("Model") + ylab("Calibration Intercept")
+
+
+#Joint Risks - CALIBRATION SLOPE
+SummaryResults %>% 
+  select(Model, rho_latent, starts_with("CalSlope_")) %>%
+  gather(key = "Estimate", value, -Model, -rho_latent) %>%
+  extract("Estimate", c("Outcome", "Quantity"), "CalSlope_([A-Z0-9]+)_([a-z]+)") %>%
+  spread(Quantity, value) %>%
+  mutate(lower = (mean - (1.96*sd)),
+         upper = (mean + (1.96*sd))) %>%
+  filter(Outcome == "P01" |
+           Outcome == "P10" |
+           Outcome == "P11") %>%
+  ungroup() %>%
+  mutate(Model = fct_relevel(Model,
+                             c("Univariate", "SR", "PCC", "MLR", "MLM", "MPM"))) %>%
+  ggplot(aes(x = Model, y = mean)) +
+  facet_wrap(~Outcome + rho_latent, scales = "fixed", nrow = 3) +
+  geom_point() +
+  geom_errorbar(aes(ymin = lower, ymax = upper)) +
+  geom_abline(intercept = 1, slope = 0, linetype = "dashed") +
+  theme_bw(base_size = 12) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  xlab("Model") + ylab("Calibration Slope")
+
+
+#Marginal Risks - CALIBRATION SLOPE
+SummaryResults %>% 
+  select(Model, rho_latent, starts_with("CalSlope_")) %>%
+  gather(key = "Estimate", value, -Model, -rho_latent) %>%
+  extract("Estimate", c("Outcome", "Quantity"), "CalSlope_([A-Z0-9]+)_([a-z]+)") %>%
+  spread(Quantity, value) %>%
+  mutate(lower = (mean - (1.96*sd)),
+         upper = (mean + (1.96*sd))) %>%
+  filter(Outcome == "PY1" |
+           Outcome == "PY2") %>%
+  ungroup() %>%
+  mutate(Model = fct_relevel(Model,
+                             c("Univariate", "SR", "PCC", "MLR", "MLM", "MPM"))) %>%
+  ggplot(aes(x = Model, y = mean)) +
+  facet_wrap(~Outcome + rho_latent, scales = "fixed", nrow = 2) +
+  geom_point() +
+  geom_errorbar(aes(ymin = lower, ymax = upper)) +
+  geom_abline(intercept = 1, slope = 0, linetype = "dashed") +
+  theme_bw(base_size = 12) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  xlab("Model") + ylab("Calibration Slope")
+
+
+#Joint Risk - AUC
+SummaryResults %>% 
+  select(Model, rho_latent, starts_with("AUC_")) %>%
+  gather(key = "Estimate", value, -Model, -rho_latent) %>%
+  extract("Estimate", c("Outcome", "Quantity"), "AUC_([A-Z0-9]+)_([a-z]+)") %>%
+  spread(Quantity, value) %>%
+  mutate(lower = (mean - (1.96*sd)),
+         upper = (mean + (1.96*sd))) %>%
+  filter(Outcome == "P01" |
+           Outcome == "P10" |
+           Outcome == "P11") %>%
+  ungroup() %>%
+  mutate(Model = fct_relevel(Model,
+                             c("Univariate", "SR", "PCC", "MLR", "MLM", "MPM"))) %>%
+  ggplot(aes(x = Model, y = mean)) +
+  facet_wrap(~Outcome + rho_latent, scales = "fixed", nrow = 3) +
+  geom_point() +
+  geom_errorbar(aes(ymin = lower, ymax = upper)) +
+  theme_bw(base_size = 12) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  xlab("Model") + ylab("AUC")
+
+#Marginal Risk - AUC
+SummaryResults %>% 
+  select(Model, rho_latent, starts_with("AUC_")) %>%
+  gather(key = "Estimate", value, -Model, -rho_latent) %>%
+  extract("Estimate", c("Outcome", "Quantity"), "AUC_([A-Z0-9]+)_([a-z]+)") %>%
+  spread(Quantity, value) %>%
+  mutate(lower = (mean - (1.96*sd)),
+         upper = (mean + (1.96*sd))) %>%
+  filter(Outcome == "PY1" |
+           Outcome == "PY2") %>%
+  ungroup() %>%
+  mutate(Model = fct_relevel(Model,
+                             c("Univariate", "SR", "PCC", "MLR", "MLM", "MPM"))) %>%
+  ggplot(aes(x = Model, y = mean)) +
+  facet_wrap(~Outcome + rho_latent, scales = "fixed", nrow = 2) +
+  geom_point() +
+  geom_errorbar(aes(ymin = lower, ymax = upper)) +
+  theme_bw(base_size = 12) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  xlab("Model") + ylab("AUC")
+
+
+#Joint Risk - MSE
+SummaryResults %>% 
+  select(Model, rho_latent, starts_with("MSE_")) %>%
+  gather(key = "Estimate", value, -Model, -rho_latent) %>%
+  extract("Estimate", c("Outcome", "Quantity"), "MSE_([A-Z0-9]+)_([a-z]+)") %>%
+  spread(Quantity, value) %>%
+  mutate(lower = (mean - (1.96*sd)),
+         upper = (mean + (1.96*sd))) %>%
+  filter(Outcome == "P01" |
+           Outcome == "P10" |
+           Outcome == "P11") %>%
+  ungroup() %>%
+  mutate(Model = fct_relevel(Model,
+                             c("Univariate", "SR", "PCC", "MLR", "MLM", "MPM"))) %>%
+  ggplot(aes(x = Model, y = mean)) +
+  facet_wrap(~Outcome + rho_latent, scales = "fixed", nrow = 3) +
+  geom_point() +
+  geom_errorbar(aes(ymin = lower, ymax = upper)) +
+  theme_bw(base_size = 12) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  xlab("Model") + ylab("MSE")
+
+#Marginal Risk - MSE
+SummaryResults %>% 
+  select(Model, rho_latent, starts_with("MSE_")) %>%
+  gather(key = "Estimate", value, -Model, -rho_latent) %>%
+  extract("Estimate", c("Outcome", "Quantity"), "MSE_([A-Z0-9]+)_([a-z]+)") %>%
+  spread(Quantity, value) %>%
+  mutate(lower = (mean - (1.96*sd)),
+         upper = (mean + (1.96*sd))) %>%
+  filter(Outcome == "PY1" |
+           Outcome == "PY2") %>%
+  ungroup() %>%
+  mutate(Model = fct_relevel(Model,
+                             c("Univariate", "SR", "PCC", "MLR", "MLM", "MPM"))) %>%
+  ggplot(aes(x = Model, y = mean)) +
+  facet_wrap(~Outcome + rho_latent, scales = "fixed", nrow = 2) +
+  geom_point() +
+  geom_errorbar(aes(ymin = lower, ymax = upper)) +
+  theme_bw(base_size = 12) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  xlab("Model") + ylab("MSE")
+
+
 

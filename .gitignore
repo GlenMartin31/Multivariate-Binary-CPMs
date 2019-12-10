@@ -10,7 +10,8 @@ Simple\ Linear\ Example.R
 #Ignore R script to analyse the MIMIC data and ignore the mimic data files themselves
 MIMIC\ Analysis.R
 mimiccohort.csv
-MIMIC_Imputed.RData
+MIMIC_Development_Imputed.RData
+MIMIC_Validation_Imputed.RData
 
 #Ignore the Outputs folder, which contains draft manuscripts
 Outputs/
