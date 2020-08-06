@@ -3,12 +3,8 @@
 .RData
 .Ruserdata
 
-#Ignore testing R code
-Joint\ Logistic\ CPMs.R
-Simple\ Linear\ Example.R
-
 #Ignore R script to analyse the MIMIC data and ignore the mimic data files themselves
-MIMIC\ Analysis.R
+04_MIMIC Analysis.R
 mimiccohort.csv
 MIMIC_Development_Imputed.RData
 MIMIC_Validation_Imputed.RData
