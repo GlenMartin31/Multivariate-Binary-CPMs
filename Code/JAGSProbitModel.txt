@@ -1,3 +1,18 @@
+# #######################################################################################################################
+
+# Author of code: Glen P. Martin.
+
+# This is code for a simulation study presented in a manuscript entitled: 
+# Clinical Prediction Models to Predict the Risk of Multiple Binary Outcomes: a comparison of approaches
+# Authors:
+#   Glen P. Martin
+#   Matthew Sperrin
+#   Kym I.E. Snell
+#   Iain Buchan
+#   Richard Riley
+
+# #######################################################################################################################
+
 model  {
   #Declare likelihood for Y, relationship between Y and Y_s
   for (i in 1:n)  {
