@@ -8,6 +8,7 @@
 mimiccohort.csv
 MIMIC_Development_Imputed.RData
 MIMIC_Validation_Imputed.RData
+CalibrationPlot.RDS
 
 #Ignore the Outputs folder, which contains draft manuscripts
 Outputs/
