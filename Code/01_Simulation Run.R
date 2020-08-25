@@ -32,11 +32,8 @@ sims_parameters <- crossing(
 # number of repeats per scenario
 n_rep <- 100
 
-#Set up parallel process
-plan(multiprocess)
-
 #Run the main simulation study:
-set.seed(46513)
+plan(multiprocess, workers = (availableCores()-1))
 sims_main <- sims_parameters %>%
   mutate(results = future_pmap(.l = list(N = N,
                                          rho = rho),
@@ -44,12 +41,13 @@ sims_main <- sims_parameters %>%
                                n_iter = n_rep,
                                beta_1_true = c(-1.0, log(2), log(1.00)),
                                beta_2_true = c(-1.5, log(1.00), log(3)),
-                               .progress = TRUE)
+                               .progress = TRUE,
+                               .options = future_options(seed = as.integer(46513)))
          )
 write_rds(sims_main, path = here::here("Data", "sims_main.RDS"))
 
 #Run a sensitivity analysis with a lower (marginal) outcome proportion for Y1 and Y2:
-set.seed(94735)
+plan(multiprocess, workers = (availableCores()-1))
 sims_sensanalysis <- sims_parameters %>%
   mutate(results = future_pmap(.l = list(N = N,
                                          rho = rho),
@@ -58,7 +56,8 @@ sims_sensanalysis <- sims_parameters %>%
                                
                                beta_1_true = c(-3.0, log(2), log(1.00)),
                                beta_2_true = c(-3.5, log(1.00), log(3)),
-                               .progress = TRUE)
+                               .progress = TRUE,
+                               .options = future_options(seed = as.integer(94735)))
   )
 
 write_rds(sims_sensanalysis, path = here::here("Data", "sims_sensanalysis.RDS"))
