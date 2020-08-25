@@ -43,8 +43,13 @@ View(sims_all %>%
                  round(mean(Obs_P01), 3),
                  .groups = "drop"))
 
-mean(Results$Obs_Py1)
-mean(Results$Obs_Py2)
+View(sims_all %>%
+       group_by(rho, Simulation) %>%
+       summarise(round(mean(rho_observed), 3),
+                 round(mean(Obs_Py1), 3),
+                 round(mean(Obs_Py2), 3),
+                 .groups = "drop"))
+
 
 
 ###-------------------------------------------------------------------------------------
@@ -297,11 +302,9 @@ SummaryResults %>%
   facet_wrap(~rho, scales = "fixed", nrow = 1) +
   geom_point() +
   geom_errorbar(aes(ymin = lower, ymax = upper)) +
-  geom_abline(intercept = (1/4), slope = 0, linetype = "dashed") +
   theme_bw(base_size = 12) + 
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  xlab("Model") + ylab("Overall PDI") +
-  ylim(0.25,0.75)
+  xlab("Model") + ylab("Overall PDI") 
 
 # ggsave(here::here("Outputs", "Manuscript", "Fig3_PDI.tiff"), 
 #        height = 7, width = 8, units = "in", dpi = 300)
@@ -322,11 +325,9 @@ SummaryResults %>%
   facet_wrap(~Outcome + rho, scales = "fixed", nrow = 3) +
   geom_point() +
   geom_errorbar(aes(ymin = lower, ymax = upper)) +
-  geom_abline(intercept = (1/4), slope = 0, linetype = "dashed") +
   theme_bw(base_size = 12) + 
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  xlab("Model") + ylab("Outcome-Specific PDI") +
-  ylim(0.25,1)
+  xlab("Model") + ylab("Outcome-Specific PDI") 
 
 
 
