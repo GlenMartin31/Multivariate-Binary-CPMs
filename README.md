@@ -1,7 +1,7 @@
 # Multivariate Logistic CPMs
 Repo for the paper entitled "Clinical Prediction Models to Predict the Risk of Multiple Binary Outcomes: a comparison of multivariate approaches", which is published in Statistics in Medicine (2020). This paper is published open-access here: https://onlinelibrary.wiley.com/doi/10.1002/sim.8787
 
-The paper explores statistical methodology to allow the development of clinical prediction models (CPMs) for two binary outcomes simultaneously, rather than modelling as seperate outcomes. 
+The paper explores statistical methodology to allow the development of clinical prediction models (CPMs) for two binary outcomes simultaneously, rather than modelling as seperate outcomes. An overview is given here: https://glenmartin31.github.io/blog/2020/10/28/when
 
 The repo contains the coding scripts and results from the simulation study described in the paper as follows:
 ## Code sub-folder
